@@ -2023,6 +2023,55 @@ function backupSchoolsJSON() {
     await loadSchoolsFromCloud();
     await logPageVisit();
 })();
+
+/* ---------- TỐI ƯU GIAO DIỆN ĐIỆN THOẠI (RESPONSIVE) ---------- */
+(function optimizeMobileUI() {
+    var mobileStyle = document.createElement('style');
+    mobileStyle.innerHTML = `
+        @media (max-width: 768px) {
+            html, body, #map {
+                max-width: 100vw !important;
+                overflow-x: hidden !important;
+            }
+            .leaflet-control-layers {
+                max-width: 82vw !important;
+                max-height: 58vh !important;
+                overflow-y: auto !important;
+                font-size: 13px !important;
+            }
+            .leaflet-bottom.leaflet-left {
+                max-width: 72vw !important;
+            }
+            .leaflet-bottom.leaflet-left * {
+                font-size: 11px !important;
+                white-space: nowrap !important;
+                overflow: hidden !important;
+                text-overflow: ellipsis !important;
+            }
+        }
+    `;
+    document.head.appendChild(mobileStyle);
+
+    function adjustMobileLayout() {
+        if (window.innerWidth <= 768) {
+            var layerControl = document.querySelector('.leaflet-control-layers');
+            if (layerControl && layerControl.classList.contains('leaflet-control-layers-expanded')) {
+                layerControl.classList.remove('leaflet-control-layers-expanded');
+            }
+
+            var searchInput = document.querySelector('input[placeholder*="Tìm"]');
+            if (searchInput && searchInput.parentElement && searchInput.parentElement.parentElement) {
+                var barContainer = searchInput.parentElement.parentElement;
+                barContainer.style.flexWrap = 'wrap';
+                barContainer.style.maxWidth = 'calc(100vw - 68px)';
+            }
+        }
+    }
+
+    window.addEventListener('load', function () {
+        setTimeout(adjustMobileLayout, 350);
+    });
+})();
 </script>
 </body>
 </html>

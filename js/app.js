@@ -241,20 +241,40 @@ var layer_TruongHoctruonghoc_nhatrang_5 = new L.geoJson(json_TruongHoctruonghoc_
         return L.marker(latlng, { icon: getSchoolIcon(feature.properties['CapHoc'], 1.0), interactive: true });
     },
     onEachFeature: function(feature, layer) {
-        bindDefaultSchoolInteraction(feature, layer);
+        bindSchool(feature, layer);
     }
 });
 map.addLayer(layer_TruongHoctruonghoc_nhatrang_5);
 
-function bindDefaultSchoolInteraction(feature, layer) {
-    var p = feature.properties;
-    var fields = { 'name': 'Tên trường', 'CapHoc': 'Cấp học', 'LoaiHinh': 'Loại hình' };
-    layer.bindPopup(function() { return popupHTML(p, fields); }, {maxHeight: 400});
+var SCHOOL_FIELDS = { 'name': 'Tên trường', 'CapHoc': 'Cấp học', 'LoaiHinh': 'Loại hình' };
+
+/* Mức tiếp cận của một trường so với điểm xuất phát hiện tại (khoảng cách đường chim bay) */
+function accessInfo(marker) {
+    var cap = String(marker.feature.properties['CapHoc'] || '');
+    var dist = currentOrigin.latlng.distanceTo(marker.getLatLng());
+    var walkLimit = (cap.indexOf('Mầm non') !== -1 || cap.indexOf('Tiểu học') !== -1) ? 400 : 800;
+    if (dist <= walkLimit) return { dist: dist, text: '🟢 <b>Dễ tiếp cận (Đi bộ)</b>', color: '#16a34a', filter: 'drop-shadow(0 0 8px #22c55e)', opacity: '1' };
+    if (dist <= 2500) return { dist: dist, text: '🟡 <b>Cần cân nhắc (Đi xe máy)</b>', color: '#d97706', filter: 'drop-shadow(0 0 6px #eab308)', opacity: '0.9' };
+    return { dist: dist, text: '🔴 <b>Khá xa (>2,5km)</b>', color: '#dc2626', filter: 'grayscale(50%)', opacity: '0.65' };
+}
+
+function schoolDetailHtml(p, a) {
+    return '<div style="min-width:210px;">' +
+        '<h4 style="margin:0 0 6px 0; color:#1e293b; border-bottom:2px solid #2563eb; padding-bottom:4px;">' + (p['name'] || 'Trường học') + '</h4>' +
+        '<div style="font-size:12.5px; margin-bottom:4px;"><b>Cấp học:</b> ' + (p['CapHoc'] || 'Chưa cập nhật') + '</div>' +
+        '<div style="font-size:12.5px; margin-bottom:4px;"><b>Trạng thái:</b> ' + a.text + '</div>' +
+        '<div style="font-size:13px; background:#f1f5f9; padding:6px 8px; border-radius:5px; margin-top:6px;">' +
+            '📍 Cách <b>' + currentOrigin.label + '</b>: <b style="color:' + a.color + '; font-size:14px;">' + formatDistance(a.dist) + '</b></div></div>';
+}
+
+/* Gắn popup và sự kiện click cho một trường (chỉ gắn một lần khi tạo marker) */
+function bindSchool(feature, layer) {
+    layer.bindPopup(function() {
+        return currentOrigin ? schoolDetailHtml(feature.properties, accessInfo(layer)) : popupHTML(feature.properties, SCHOOL_FIELDS);
+    }, { maxHeight: 400 });
     layer.off('click').on('click', function() {
         if (isPickingCoord) return;
-        if (currentOrigin) {
-            drawConnectionLine(currentOrigin.latlng, layer);
-        }
+        if (currentOrigin) drawConnectionLine(currentOrigin.latlng, layer);
         layer.openPopup();
     });
 }
@@ -487,9 +507,8 @@ function clearConnectionLine() {
 async function drawConnectionLine(originLatLng, schoolMarker) {
     if (!originLatLng || !schoolMarker) return;
     var schoolLatLng = schoolMarker.getLatLng();
-    var myToken = ++routeToken;
-    clearConnectionLine();
-    routeToken = myToken;
+    clearConnectionLine();            // tăng routeToken, huỷ tuyến cũ
+    var myToken = routeToken;
 
     var crowDist = originLatLng.distanceTo(schoolLatLng);
     var group = L.featureGroup();
@@ -552,7 +571,6 @@ function setOrigin(newOrigin, keepExistingLine) {
         layer_TruongHoctruonghoc_nhatrang_5.eachLayer(function(marker) {
             var el = marker.getElement();
             if (el) { el.style.filter = ''; el.style.opacity = '1'; }
-            bindDefaultSchoolInteraction(marker.feature, marker);
         });
         applySchoolLabels();
         resetLabels(labelLayers);
@@ -571,46 +589,11 @@ function setOrigin(newOrigin, keepExistingLine) {
         activeWardCenterMarker.bindTooltip('<div><b>📍 Tâm Phường / Xã ' + currentOrigin.wardName + '</b></div>', { direction: 'top', offset: [0, -14] });
     }
 
-    var originLatLng = currentOrigin.latlng;
-    var originLabel = currentOrigin.label;
-
-    layer_TruongHoctruonghoc_nhatrang_5.eachLayer(function(schoolMarker) {
-        var p = schoolMarker.feature.properties;
-        var distanceMeters = originLatLng.distanceTo(schoolMarker.getLatLng());
-        var distStr = formatDistance(distanceMeters);
-        var capHoc = String(p['CapHoc'] || '');
-        var schoolName = p['name'] || 'Trường học';
-        var walkLimit = (capHoc.indexOf('Mầm non') !== -1 || capHoc.indexOf('Tiểu học') !== -1) ? 400 : 800;
-
-        var el = schoolMarker.getElement();
-        var badgeText = '', statusColor = '';
-        if (distanceMeters <= walkLimit) {
-            badgeText = '🟢 <b>Dễ tiếp cận (Đi bộ)</b>'; statusColor = '#16a34a';
-            if (el) { el.style.filter = 'drop-shadow(0 0 8px #22c55e)'; el.style.opacity = '1'; }
-        } else if (distanceMeters <= 2500) {
-            badgeText = '🟡 <b>Cần cân nhắc (Đi xe máy)</b>'; statusColor = '#d97706';
-            if (el) { el.style.filter = 'drop-shadow(0 0 6px #eab308)'; el.style.opacity = '0.9'; }
-        } else {
-            badgeText = '🔴 <b>Khá xa (>2,5km)</b>'; statusColor = '#dc2626';
-            if (el) { el.style.filter = 'grayscale(50%)'; el.style.opacity = '0.65'; }
-        }
-
-        schoolMarker.bindTooltip('<div><b>' + schoolName + '</b><br/>Cách ' + originLabel + ': <b style="color:' + statusColor + ';">' + distStr + '</b></div>', { direction: 'top', offset: [0, -15] });
-        var detailPopup = function() { return '<div style="min-width:210px;">' +
-                '<h4 style="margin:0 0 6px 0; color:#1e293b; border-bottom:2px solid #2563eb; padding-bottom:4px;">' + schoolName + '</h4>' +
-                '<div style="font-size:12.5px; margin-bottom:4px;"><b>Cấp học:</b> ' + (capHoc || 'Chưa cập nhật') + '</div>' +
-                '<div style="font-size:12.5px; margin-bottom:4px;"><b>Trạng thái:</b> ' + badgeText + '</div>' +
-                '<div style="font-size:13px; background:#f1f5f9; padding:6px 8px; border-radius:5px; margin-top:6px;">' +
-                    '📍 Cách <b>' + originLabel + '</b>: <b style="color:' + statusColor + '; font-size:14px;">' + distStr + '</b>' +
-                '</div>' +
-            '</div>'; };
-        schoolMarker.bindPopup(detailPopup, { maxHeight: 400 });
-
-        schoolMarker.off('click').on('click', function() {
-            if (isPickingCoord) return;
-            if (currentOrigin) drawConnectionLine(currentOrigin.latlng, schoolMarker);
-            schoolMarker.openPopup();
-        });
+    layer_TruongHoctruonghoc_nhatrang_5.eachLayer(function(marker) {
+        var a = accessInfo(marker), el = marker.getElement();
+        if (el) { el.style.filter = a.filter; el.style.opacity = a.opacity; }
+        marker.bindTooltip('<div><b>' + (marker.feature.properties['name'] || 'Trường học') + '</b><br/>Cách ' + currentOrigin.label +
+            ': <b style="color:' + a.color + ';">' + formatDistance(a.dist) + '</b></div>', { direction: 'top', offset: [0, -15] });
     });
 }
 
@@ -675,10 +658,19 @@ map.on('locationstop', function() {
 /* ==========================================================================
    QUẢN LÝ 3 MÀN HÌNH (ĐĂNG NHẬP - BẢN ĐỒ - QUẢN TRỊ) & SUPABASE
    ========================================================================== */
-function openModal(id) { document.getElementById(id).style.display = 'flex'; }
-function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+function openModal(id) {
+    var el = document.getElementById(id);
+    if (el) el.style.display = 'flex';
+}
+function closeModal(id) {
+    var el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+}
 
-document.getElementById('helpBtn').addEventListener('click', function() { openModal('helpModal'); });
+var helpBtnEl = document.getElementById('helpBtn');
+if (helpBtnEl) {
+    helpBtnEl.addEventListener('click', function() { openModal('helpModal'); });
+}
 
 function esc(s) {
     var map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
@@ -695,22 +687,33 @@ function toast(msg) {
 
 function setLoginMode(regMode) {
     isRegisterMode = regMode;
-    document.getElementById('authMsg').textContent = '';
-    document.getElementById('tabLoginMode').classList.toggle('active', !regMode);
-    document.getElementById('tabRegisterMode').classList.toggle('active', regMode);
-    document.getElementById('fullNameGroup').style.display = regMode ? 'block' : 'none';
-    document.getElementById('authSubmitBtn').textContent = regMode ? 'Tạo tài khoản' : 'Đăng nhập';
-    document.getElementById('authPassword').autocomplete = regMode ? 'new-password' : 'current-password';
-    document.getElementById('confirmGroup').style.display = regMode ? 'block' : 'none';
+    var authMsg = document.getElementById('authMsg');
+    var tabLogin = document.getElementById('tabLoginMode');
+    var tabReg = document.getElementById('tabRegisterMode');
+    var fullNameGroup = document.getElementById('fullNameGroup');
+    var submitBtn = document.getElementById('authSubmitBtn');
+    var passwordInput = document.getElementById('authPassword');
+    var confirmGroup = document.getElementById('confirmGroup');
+
+    if (authMsg) authMsg.textContent = '';
+    if (tabLogin) tabLogin.classList.toggle('active', !regMode);
+    if (tabReg) tabReg.classList.toggle('active', regMode);
+    if (fullNameGroup) fullNameGroup.style.display = regMode ? 'block' : 'none';
+    if (submitBtn) submitBtn.textContent = regMode ? 'Tạo tài khoản' : 'Đăng nhập';
+    if (passwordInput) passwordInput.autocomplete = regMode ? 'new-password' : 'current-password';
+    if (confirmGroup) confirmGroup.style.display = regMode ? 'block' : 'none';
 }
 
 function showLoginPage() {
-    document.getElementById('adminPage').style.display = 'none';
-    document.getElementById('loginPage').style.display = 'flex';
+    var adminPage = document.getElementById('adminPage');
+    var loginPage = document.getElementById('loginPage');
+    if (adminPage) adminPage.style.display = 'none';
+    if (loginPage) loginPage.style.display = 'flex';
 }
 
 function hideLoginPageToMap() {
-    document.getElementById('loginPage').style.display = 'none';
+    var loginPage = document.getElementById('loginPage');
+    if (loginPage) loginPage.style.display = 'none';
     setTimeout(function() { map.invalidateSize(); }, 150);
 }
 
@@ -726,31 +729,47 @@ async function submitAuthForm() {
         toast('Chưa cấu hình SUPABASE_URL và SUPABASE_ANON_KEY.');
         return;
     }
-    var email = document.getElementById('authEmail').value.trim();
-    var password = document.getElementById('authPassword').value;
-    var fullName = document.getElementById('authFullName').value.trim();
+    var emailEl = document.getElementById('authEmail');
+    var passEl = document.getElementById('authPassword');
+    var fullNameEl = document.getElementById('authFullName');
+    var confirmEl = document.getElementById('authPasswordConfirm');
     var msgEl = document.getElementById('authMsg');
     var btn = document.getElementById('authSubmitBtn');
 
+    var email = emailEl ? emailEl.value.trim() : '';
+    var password = passEl ? passEl.value : '';
+    var fullName = fullNameEl ? fullNameEl.value.trim() : '';
+    var confirmPass = confirmEl ? confirmEl.value : '';
+
     if (!email || password.length < 6) {
-        msgEl.textContent = 'Vui lòng nhập email hợp lệ và mật khẩu từ 6 ký tự.';
+        if (msgEl) msgEl.textContent = 'Vui lòng nhập email hợp lệ và mật khẩu từ 6 ký tự.';
         return;
     }
-    if (isRegisterMode && password !== document.getElementById('authPasswordConfirm').value) {
-        msgEl.textContent = 'Mật khẩu xác nhận không khớp.';
+    if (isRegisterMode && password !== confirmPass) {
+        if (msgEl) msgEl.textContent = 'Mật khẩu xác nhận không khớp.';
         return;
     }
-    msgEl.textContent = '';
-    btn.disabled = true;
+    if (msgEl) msgEl.textContent = '';
+    if (btn) btn.disabled = true;
+
+    var res;
     try {
-        var res = isRegisterMode
-            ? await sb.auth.signUp({ email: email, password: password, options: { data: { full_name: fullName || email.split('@')[0] } } })
+        res = isRegisterMode
+            ? await sb.auth.signUp({
+                email: email,
+                password: password,
+                options: { data: { full_name: fullName || email.split('@')[0] } }
+            })
             : await sb.auth.signInWithPassword({ email: email, password: password });
+    } catch (err) {
+        if (msgEl) msgEl.textContent = 'Lỗi kết nối: ' + (err.message || err);
+        return;
     } finally {
-        btn.disabled = false;
+        if (btn) btn.disabled = false;
     }
+
     if (res.error) {
-        msgEl.textContent = (isRegisterMode ? 'Lỗi đăng ký: ' : 'Sai email hoặc mật khẩu: ') + res.error.message;
+        if (msgEl) msgEl.textContent = (isRegisterMode ? 'Lỗi đăng ký: ' : 'Sai email hoặc mật khẩu: ') + res.error.message;
         return;
     }
     await checkUserSession();
@@ -759,6 +778,7 @@ async function submitAuthForm() {
 
 function renderMapAuthBar() {
     var authArea = document.getElementById('authArea');
+    if (!authArea) return;
     if (!currentUser || !currentProfile) {
         authArea.innerHTML = '<button class="action-btn primary" onclick="showLoginPage()">' +
             '<i class="fas fa-sign-in-alt"></i> <span>Đăng nhập / Đăng ký</span></button>';
@@ -865,14 +885,16 @@ function localSchoolRows() {
 
 /* ---------- TRANG QUẢN TRỊ RIÊNG (ADMIN PAGE) ---------- */
 async function openAdminPage() {
-    document.getElementById('adminPage').style.display = 'block';
+    var adminPage = document.getElementById('adminPage');
+    if (adminPage) adminPage.style.display = 'block';
     fillSchoolSelects();
     await loadSchoolsFromCloud();
     renderAdminSchoolTable();
 }
 
 function closeAdminPage() {
-    document.getElementById('adminPage').style.display = 'none';
+    var adminPage = document.getElementById('adminPage');
+    if (adminPage) adminPage.style.display = 'none';
     setTimeout(function() { map.invalidateSize(); }, 150);
 }
 
@@ -891,14 +913,21 @@ function startPickSchoolOnMap() {
     closeAdminPage();
     isPickingCoord = true;
     map.getContainer().style.cursor = 'crosshair';
-    pickInfo.style.display = 'block';
-    pickInfo.innerHTML = 'Bấm vào vị trí trường học trên bản đồ để lấy tọa độ';
+    if (pickInfo) {
+        pickInfo.style.display = 'block';
+        pickInfo.innerHTML = 'Bấm vào vị trí trường học trên bản đồ để lấy tọa độ';
+    }
 }
 
 function resetSchoolForm() {
-    ['editSchoolId', 'schName', 'schLat', 'schLng'].forEach(function(id) { document.getElementById(id).value = ''; });
-    document.getElementById('geoPaste').value = '';
-    document.getElementById('schoolFormHeader').textContent = 'Thêm trường học';
+    ['editSchoolId', 'schName', 'schLat', 'schLng'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.value = '';
+    });
+    var pasteEl = document.getElementById('geoPaste');
+    if (pasteEl) pasteEl.value = '';
+    var headerEl = document.getElementById('schoolFormHeader');
+    if (headerEl) headerEl.textContent = 'Thêm trường học';
 }
 
 function editSchoolRow(id) {
@@ -911,7 +940,8 @@ function editSchoolRow(id) {
     document.getElementById('schLat').value = s.lat;
     document.getElementById('schLng').value = s.lng;
     document.getElementById('schoolFormHeader').textContent = 'Chỉnh sửa: ' + s.name;
-    document.querySelector('.admin-main').scrollTo({ top: 0, behavior: 'smooth' });
+    var mainEl = document.querySelector('.admin-main');
+    if (mainEl) mainEl.scrollTo({ top: 0, behavior: 'smooth' });
     document.getElementById('schName').focus();
 }
 
@@ -949,12 +979,14 @@ async function deleteSchoolRow(id, name) {
 }
 
 function renderAdminSchoolTable() {
-    var q = (document.getElementById('adminSearchSchool').value || '').toLowerCase();
+    var searchAdmin = document.getElementById('adminSearchSchool');
+    var q = (searchAdmin ? searchAdmin.value : '').toLowerCase();
     var tbody = document.getElementById('adminSchoolTableBody');
+    if (!tbody) return;
     var list = cloudSchools.filter(function(s) { return s.name.toLowerCase().indexOf(q) !== -1; });
 
-    // Nút nạp dữ liệu gốc chỉ hiện khi bảng truong_hoc trên Cloud còn trống
-    document.getElementById('syncInitialBtn').style.display = cloudSchools.length ? 'none' : 'inline-block';
+    var syncBtn = document.getElementById('syncInitialBtn');
+    if (syncBtn) syncBtn.style.display = cloudSchools.length ? 'none' : 'inline-block';
 
     if (list.length === 0) {
         var msg = cloudLoadError ? 'Không đọc được bảng truong_hoc: ' + esc(cloudLoadError) : 'Chưa có trường nào. Bấm "Nạp dữ liệu gốc lên Cloud" hoặc thêm trường mới.';
@@ -975,8 +1007,10 @@ var CAP_HOC_LIST = ['Mầm non / Mẫu giáo', 'Tiểu học', 'THCS', 'THPT', '
 var LOAI_HINH_LIST = ['Công lập', 'Tư thục / Dân lập'];
 function fillSchoolSelects() {
     function opts(list) { return list.map(function(v) { return '<option value="' + esc(v) + '">' + esc(v) + '</option>'; }).join(''); }
-    document.getElementById('schCapHoc').innerHTML = opts(CAP_HOC_LIST);
-    document.getElementById('schLoaiHinh').innerHTML = opts(LOAI_HINH_LIST);
+    var capEl = document.getElementById('schCapHoc');
+    var loaiEl = document.getElementById('schLoaiHinh');
+    if (capEl) capEl.innerHTML = opts(CAP_HOC_LIST);
+    if (loaiEl) loaiEl.innerHTML = opts(LOAI_HINH_LIST);
 }
 
 /* ---------- KHỞI CHẠY KHI MỞ TRANG ---------- */
@@ -991,51 +1025,9 @@ function fillSchoolSelects() {
     await loadSchoolsFromCloud();
 })();
 
-/* ---------- TỐI ƯU GIAO DIỆN ĐIỆN THOẠI (RESPONSIVE) ---------- */
-(function optimizeMobileUI() {
-    var mobileStyle = document.createElement('style');
-    mobileStyle.innerHTML = `
-        @media (max-width: 768px) {
-            html, body, #map {
-                max-width: 100vw !important;
-                overflow-x: hidden !important;
-            }
-            .leaflet-control-layers {
-                max-width: 82vw !important;
-                max-height: 58vh !important;
-                overflow-y: auto !important;
-                font-size: 13px !important;
-            }
-            .leaflet-bottom.leaflet-left {
-                max-width: 72vw !important;
-            }
-            .leaflet-bottom.leaflet-left * {
-                font-size: 11px !important;
-                white-space: nowrap !important;
-                overflow: hidden !important;
-                text-overflow: ellipsis !important;
-            }
-        }
-    `;
-    document.head.appendChild(mobileStyle);
-
-    function adjustMobileLayout() {
-        if (window.innerWidth <= 768) {
-            var layerControl = document.querySelector('.leaflet-control-layers');
-            if (layerControl && layerControl.classList.contains('leaflet-control-layers-expanded')) {
-                layerControl.classList.remove('leaflet-control-layers-expanded');
-            }
-
-            var searchInput = document.querySelector('input[placeholder*="Tìm"]');
-            if (searchInput && searchInput.parentElement && searchInput.parentElement.parentElement) {
-                var barContainer = searchInput.parentElement.parentElement;
-                barContainer.style.flexWrap = 'wrap';
-                barContainer.style.maxWidth = 'calc(100vw - 68px)';
-            }
-        }
-    }
-
-    window.addEventListener('load', function () {
-        setTimeout(adjustMobileLayout, 350);
-    });
-})();
+/* ---------- GIAO DIỆN ĐIỆN THOẠI: thu gọn bảng lớp (phần CSS nằm trong css/style.css) ---------- */
+window.addEventListener('load', function() {
+    if (window.innerWidth > 768) return;
+    var layerControl = document.querySelector('.leaflet-control-layers');
+    if (layerControl) layerControl.classList.remove('leaflet-control-layers-expanded');
+});

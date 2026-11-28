@@ -54,11 +54,6 @@
         <label for="authPasswordConfirm">Xác nhận mật khẩu</label>
         <input type="password" id="authPasswordConfirm" class="form-control" placeholder="Nhập lại mật khẩu" autocomplete="new-password">
       </div>
-      <div class="form-group" id="avatarGroup" style="display:none;">
-        <label for="authAvatar">Ảnh đại diện <span class="muted">(không bắt buộc)</span></label>
-        <input type="file" id="authAvatar" class="form-control" accept="image/*">
-      </div>
-
       <div id="authMsg" class="form-msg" role="alert"></div>
 
       <button type="submit" id="authSubmitBtn" class="login-btn-main">Đăng nhập</button>
@@ -97,7 +92,6 @@
       </select>
     </div>
     <span class="toolbar-sep"></span>
-    <button id="measureBtn" class="action-btn"><i class="fas fa-ruler"></i> <span>Thước đo</span></button>
     <button id="helpBtn" class="action-btn" title="Hướng dẫn sử dụng"><i class="fas fa-question-circle"></i> <span>Hướng dẫn</span></button>
   </div>
 
@@ -106,7 +100,7 @@
 </div>
 
 <div class="brand-chip"><i class="fas fa-school"></i><div>Đánh giá khả năng tiếp cận trường học<small>TP. Nha Trang · WebGIS</small></div></div>
-<div id="measureInfo" class="measure-info">Bấm trên bản đồ để bắt đầu đo</div>
+<div id="pickInfo" class="measure-info">Bấm vào vị trí trường học trên bản đồ để lấy tọa độ</div>
 
 <!-- ==================== TRANG QUẢN TRỊ ==================== -->
 <div id="adminPage">
@@ -118,11 +112,7 @@
           <span>Trường học TP. Nha Trang</span>
         </div>
         <nav>
-          <div class="admin-nav-item active" data-tab="tabSchools" onclick="switchAdminTab('tabSchools', this)"><i class="fas fa-school"></i> Trường học</div>
-          <div class="admin-nav-item" data-tab="tabAdmins" onclick="switchAdminTab('tabAdmins', this)"><i class="fas fa-user-cog"></i> Quản trị viên</div>
-          <div class="admin-nav-item" data-tab="tabUsers" onclick="switchAdminTab('tabUsers', this)"><i class="fas fa-users-cog"></i> Người dùng</div>
-          <div class="admin-nav-item" data-tab="tabCatalogs" onclick="switchAdminTab('tabCatalogs', this)"><i class="fas fa-tags"></i> Danh mục</div>
-          <div class="admin-nav-item" data-tab="tabStats" onclick="switchAdminTab('tabStats', this)"><i class="fas fa-chart-bar"></i> Thống kê và sao lưu</div>
+          <div class="admin-nav-item active" data-tab="tabSchools"><i class="fas fa-school"></i> Trường học</div>
         </nav>
       </div>
       <div class="admin-side-actions">
@@ -151,16 +141,6 @@
             <div class="form-group span-4"><label>Dán tọa độ Google Maps</label><input type="text" id="geoPaste" class="form-control" placeholder="VD: 12.267306359051734, 109.19594502128577" onpaste="setTimeout(applyPastedCoords, 0)" onchange="applyPastedCoords()"></div>
             <div class="form-group"><label>Vĩ độ (Latitude) *</label><input type="number" step="any" id="schLat" class="form-control" placeholder="12.2485"></div>
             <div class="form-group"><label>Kinh độ (Longitude) *</label><input type="number" step="any" id="schLng" class="form-control" placeholder="109.1920"></div>
-            <div class="form-group span-2">
-              <label>Ảnh trường học</label>
-              <div class="photo-field">
-                <img id="schPhotoPreview" class="photo-preview" alt="" hidden>
-                <div>
-                  <input type="file" id="schPhoto" class="form-control" accept="image/*" onchange="previewSchoolPhoto(this)">
-                  <label class="check"><input type="checkbox" id="schPhotoRemove"> Xóa ảnh hiện tại</label>
-                </div>
-              </div>
-            </div>
           </div>
           <div class="btn-row">
             <button type="button" class="btn-sm btn-blue" onclick="saveSchool()">Lưu trường học</button>
@@ -179,74 +159,6 @@
         </div>
       </section>
 
-      <!-- Người dùng -->
-      <section id="tabAdmins" class="tab-pane">
-        <header class="admin-head"><h2>Quản trị viên <span class="count" id="adminCount">0</span></h2><p>Tài khoản có quyền vào trang quản trị.</p></header>
-        <div class="admin-card">
-          <input type="text" id="adminSearchAdmin" class="form-control" placeholder="Tìm theo email hoặc họ tên..." oninput="renderAdminUserTable()">
-        </div>
-        <div class="user-grid" id="adminAdminTableBody"></div>
-      </section>
-
-      <section id="tabUsers" class="tab-pane">
-        <header class="admin-head"><h2>Người dùng <span class="count" id="userCount">0</span></h2><p>Tài khoản đăng ký thông thường.</p></header>
-        <div class="admin-card">
-          <input type="text" id="adminSearchUser" class="form-control" placeholder="Tìm theo email hoặc họ tên..." oninput="renderAdminUserTable()">
-        </div>
-        <div class="user-grid" id="adminUserTableBody"></div>
-      </section>
-
-      <!-- Danh mục -->
-      <section id="tabCatalogs" class="tab-pane">
-        <header class="admin-head"><h2>Danh mục</h2><p>Các giá trị dùng trong biểu mẫu thêm và sửa trường học.</p></header>
-        <div class="form-row">
-          <div class="admin-card">
-            <b class="card-title">Cấp trường học</b>
-            <div class="inline-add">
-              <input type="text" id="newCapInput" class="form-control" placeholder="Nhập tên cấp học">
-              <button class="btn-sm btn-blue" onclick="addCatalog('cap_truong', 'ten_cap', 'newCapInput')">Thêm</button>
-            </div>
-            <table class="data-table"><tbody id="capCatalogBody"></tbody></table>
-          </div>
-          <div class="admin-card">
-            <b class="card-title">Loại hình trường học</b>
-            <div class="inline-add">
-              <input type="text" id="newLoaiInput" class="form-control" placeholder="Nhập loại hình">
-              <button class="btn-sm btn-blue" onclick="addCatalog('loai_hinh', 'ten_loai', 'newLoaiInput')">Thêm</button>
-            </div>
-            <table class="data-table"><tbody id="loaiCatalogBody"></tbody></table>
-          </div>
-        </div>
-        <div class="admin-card">
-          <b class="card-title">Dữ liệu không gian nền đang tích hợp</b>
-          <div id="spatialCatalogSummary"></div>
-        </div>
-      </section>
-
-      <!-- Thống kê và sao lưu -->
-      <section id="tabStats" class="tab-pane">
-        <header class="admin-head"><h2>Thống kê và sao lưu</h2><p>Số liệu từ đầu năm đến nay và bản sao lưu dữ liệu trường học.</p></header>
-        <div class="stat-grid">
-          <div class="stat-box"><span>Tổng số trường học</span><div class="stat-num" id="stTotalSchools">0</div><small id="stNewSchoolsMonth">Cập nhật tháng này: 0</small></div>
-          <div class="stat-box"><span>Lượt tra cứu trường (tháng này)</span><div class="stat-num" id="stSearchMonth">0</div><small id="stSearchYear">Cả năm: 0</small></div>
-          <div class="stat-box"><span>Lượt truy cập web (tháng này)</span><div class="stat-num" id="stVisitMonth">0</div><small id="stVisitYear">Cả năm: 0</small></div>
-          <div class="stat-box"><span>Tổng người dùng đăng ký</span><div class="stat-num" id="stTotalUsers">0</div><small id="stNewUsersMonth">Mới tháng này: 0</small></div>
-        </div>
-        <div class="form-row">
-          <div class="admin-card">
-            <b class="card-title">Trường được tra cứu nhiều nhất</b>
-            <table class="data-table">
-              <thead><tr><th>Tên trường</th><th class="col-num">Lượt xem</th></tr></thead>
-              <tbody id="topSchoolsBody"></tbody>
-            </table>
-          </div>
-          <div class="admin-card">
-            <b class="card-title">Sao lưu dữ liệu</b>
-            <p class="card-text">Xuất toàn bộ dữ liệu trường học hiện tại từ cơ sở dữ liệu PostgreSQL / PostGIS ra tệp JSON dự phòng.</p>
-            <button class="btn-sm btn-blue" onclick="backupSchoolsJSON()"><i class="fas fa-download"></i> Tải bản sao lưu (.json)</button>
-          </div>
-        </div>
-      </section>
     </main>
   </div>
 </div>
@@ -259,14 +171,6 @@
       <button class="modal-close" onclick="closeModal('profileModal')">&times;</button>
     </div>
     <div class="modal-body">
-      <div class="avatar-row">
-        <span id="profAvatarBox"></span>
-        <div>
-          <label class="btn-sm btn-gray" for="profAvatarFile" style="display:inline-block;">Đổi ảnh đại diện</label>
-          <input type="file" id="profAvatarFile" accept="image/*" hidden onchange="changeAvatar(this)">
-          <div class="muted" style="margin-top:4px;">JPG hoặc PNG, tự thu nhỏ về 256 px.</div>
-        </div>
-      </div>
       <div class="form-group">
         <label>Email tài khoản</label>
         <input type="text" id="profEmail" class="form-control" disabled>
@@ -287,37 +191,6 @@
   </div>
 </div>
 
-<!-- MODAL SỬA TÀI KHOẢN (QUẢN TRỊ) -->
-<div id="editUserModal" class="modal-backdrop">
-  <div class="modal-card">
-    <div class="modal-header">
-      <span>Chỉnh sửa tài khoản</span>
-      <button class="modal-close" onclick="closeModal('editUserModal')">&times;</button>
-    </div>
-    <div class="modal-body">
-      <input type="hidden" id="editUserId">
-      <div class="avatar-row">
-        <span id="editUserAvatarBox"></span>
-        <div class="btn-row">
-          <label class="btn-sm btn-gray" for="editUserAvatarFile">Đổi ảnh đại diện</label>
-          <input type="file" id="editUserAvatarFile" accept="image/*" hidden onchange="changeEditUserAvatar(this)">
-          <button type="button" class="btn-sm btn-red" id="editUserAvatarRemove" onclick="removeEditUserAvatar()">Xóa ảnh</button>
-        </div>
-      </div>
-      <div class="form-group"><label>Email</label><input type="text" id="editUserEmail" class="form-control" disabled></div>
-      <div class="form-group"><label for="editUserName">Họ và tên</label><input type="text" id="editUserName" class="form-control"></div>
-      <div class="form-group">
-        <label for="editUserRole">Vai trò</label>
-        <select id="editUserRole" class="form-control"><option value="user">Người dùng</option><option value="admin">Quản trị viên</option></select>
-      </div>
-      <div class="btn-row" style="justify-content:flex-end; margin-top:14px;">
-        <button class="btn-sm btn-gray" onclick="closeModal('editUserModal')">Hủy</button>
-        <button class="btn-sm btn-blue" onclick="saveEditUser()">Lưu thay đổi</button>
-      </div>
-    </div>
-  </div>
-</div>
-
 <!-- MODAL TRỢ GIÚP & HƯỚNG DẪN SỬ DỤNG -->
 <div id="helpModal" class="modal-backdrop">
   <div class="modal-card wide">
@@ -331,7 +204,7 @@
       <p><b>2. Tìm đường đi ngắn nhất thực tế (OSRM):</b><br/>
       Sau khi chọn Phường/Xã hoặc bấm nút <b>Định vị GPS</b> ở góc trái, hãy click vào một trường học bất kỳ (hoặc chọn từ ô tìm kiếm) để vẽ đồng thời <b>đường chim bay</b> và <b>tuyến đường đi ngắn nhất</b> trên mạng lưới giao thông.</p>
       <p><b>3. Phân quyền Quản trị viên (Admin):</b><br/>
-      Quản trị viên đăng nhập bằng tài khoản được cấp quyền để mở <b>Trang Quản trị</b>: thêm trường mới bằng cách click trực tiếp lên bản đồ, chỉnh sửa/xóa trường, quản lý người dùng, danh mục và xem báo cáo thống kê.</p>
+      Quản trị viên đăng nhập bằng tài khoản được cấp quyền để mở <b>Trang Quản trị</b>: thêm trường mới (nhập tọa độ hoặc chọn trên bản đồ), chỉnh sửa hoặc xóa trường học.</p>
     </div>
   </div>
 </div>

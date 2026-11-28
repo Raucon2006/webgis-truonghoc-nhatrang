@@ -8,9 +8,6 @@ var sb = isSupabaseConfigured ? window.supabase.createClient(SUPABASE_URL, SUPAB
 var currentUser = null;
 var currentProfile = null;
 var cloudSchools = [];
-var allProfiles = [];
-var capCatalogList = [];
-var loaiCatalogList = [];
 var isPickingCoord = false;
 var isRegisterMode = false;
 
@@ -90,72 +87,6 @@ function popupHTML(properties, fieldMap, extraRows) {
         }
     }
     return '<table style="font-size:13px;">' + rows + (extraRows || '') + '</table>';
-}
-
-/* ---------- ĐỊA CHỈ TRƯỜNG: ĐƯỜNG GẦN NHẤT + PHƯỜNG/XÃ CŨ ---------- */
-var schoolAddressCache = {};
-
-function distPointToSegM(lat, lng, a, b) {
-    var kx = 111320 * Math.cos(lat * Math.PI / 180), ky = 110540;
-    var ax = (a[0] - lng) * kx, ay = (a[1] - lat) * ky;
-    var dx = (b[0] - a[0]) * kx, dy = (b[1] - a[1]) * ky;
-    var len2 = dx * dx + dy * dy;
-    var t = len2 ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / len2)) : 0;
-    var px = ax + t * dx, py = ay + t * dy;
-    return Math.sqrt(px * px + py * py);
-}
-
-function findNearestStreet(latlng, maxMeters) {
-    var best = null, bestDist = maxMeters, pad = 0.003;
-    layer_CatDuonggkpgcat_Duong_1.eachLayer(function(road) {
-        var name = road.feature.properties['name'];
-        if (!name) return;
-        var b = road.getBounds();
-        if (latlng.lat < b.getSouth() - pad || latlng.lat > b.getNorth() + pad ||
-            latlng.lng < b.getWest() - pad || latlng.lng > b.getEast() + pad) return;
-        var geom = road.feature.geometry, lines = [];
-        if (geom.type === 'LineString') lines = [geom.coordinates];
-        else if (geom.type === 'MultiLineString') lines = geom.coordinates;
-        lines.forEach(function(coords) {
-            for (var i = 0; i < coords.length - 1; i++) {
-                var d = distPointToSegM(latlng.lat, latlng.lng, coords[i], coords[i + 1]);
-                if (d < bestDist) { bestDist = d; best = name; }
-            }
-        });
-    });
-    return best;
-}
-
-function findOldWard(latlng) {
-    var found = '';
-    layer_NhaTrang_KetQua_0.eachLayer(function(l) {
-        if (!found && isPointInWard(latlng, l.feature)) found = l.feature.properties['NAME_3'] || '';
-    });
-    return found;
-}
-
-function getSchoolAddress(latlng) {
-    var key = latlng.lat.toFixed(6) + ',' + latlng.lng.toFixed(6);
-    if (schoolAddressCache[key]) return schoolAddressCache[key];
-    var street = findNearestStreet(latlng, 250);
-    var ward = findOldWard(latlng);
-    var parts = [];
-    if (street) parts.push(/^(Đường|Hẻm|Cầu|Quốc lộ|Tỉnh lộ|Đại lộ)/i.test(street) ? street : 'Đường ' + street);
-    if (ward) parts.push(ward);
-    if (parts.length) parts.push('Nha Trang');
-    return schoolAddressCache[key] = { street: street, ward: ward, text: parts.join(', ') };
-}
-
-function addressRowHtml(latlng) {
-    var a = getSchoolAddress(latlng);
-    return '<tr><th scope="row" style="text-align:left; padding-right:8px; vertical-align:top;">Địa chỉ</th><td>' +
-        (a.text ? esc(a.text) + '<br><span style="font-size:11px; color:#64748b;">(phường/xã cũ, trước sáp nhập)</span>' : 'Chưa xác định') + '</td></tr>';
-}
-
-function addressDivHtml(latlng) {
-    var a = getSchoolAddress(latlng);
-    return '<div style="font-size:12.5px; margin-bottom:4px;"><b>Địa chỉ:</b> ' +
-        (a.text ? esc(a.text) + ' <span style="font-size:11px; color:#64748b;">(phường/xã cũ)</span>' : 'Chưa xác định') + '</div>';
 }
 
 function highlightFeature(e) {
@@ -315,19 +246,12 @@ var layer_TruongHoctruonghoc_nhatrang_5 = new L.geoJson(json_TruongHoctruonghoc_
 });
 map.addLayer(layer_TruongHoctruonghoc_nhatrang_5);
 
-function schoolPhotoHtml(p) {
-    if (!p || !p.anh_url) return '';
-    return '<a href="' + esc(p.anh_url) + '" target="_blank" rel="noopener"><img src="' + esc(p.anh_url) + '" alt="" loading="lazy" ' +
-        'style="display:block;width:230px;max-width:100%;height:140px;object-fit:cover;border-radius:6px;margin-bottom:8px;"></a>';
-}
-
 function bindDefaultSchoolInteraction(feature, layer) {
     var p = feature.properties;
     var fields = { 'name': 'Tên trường', 'CapHoc': 'Cấp học', 'LoaiHinh': 'Loại hình' };
-    layer.bindPopup(function() { return schoolPhotoHtml(p) + popupHTML(p, fields, addressRowHtml(layer.getLatLng())); }, {maxHeight: 400});
+    layer.bindPopup(function() { return popupHTML(p, fields); }, {maxHeight: 400});
     layer.off('click').on('click', function() {
-        if (isMeasuring || isPickingCoord) return;
-        logSchoolSearch(p.id || null, p.name);
+        if (isPickingCoord) return;
         if (currentOrigin) {
             drawConnectionLine(currentOrigin.latlng, layer);
         }
@@ -513,7 +437,6 @@ searchInput.addEventListener('input', function() {
         div.className = 'search-item';
         div.innerHTML = '<div>' + item.name + '</div><span style="font-size:10px; color:#64748b;">' + item.type + '</span>';
         div.addEventListener('click', function() {
-            if (item.type === 'Trường học') logSchoolSearch(item.id, item.name);
             if (item.type === 'Trường học' && currentOrigin) {
                 drawConnectionLine(currentOrigin.latlng, item.layer);
             } else {
@@ -532,56 +455,21 @@ document.addEventListener('click', function(e) {
     if (!e.target.closest('.search-container')) searchResults.style.display = 'none';
 });
 
-/* ---------- THƯỚC ĐO KHOẢNG CÁCH ---------- */
-var isMeasuring = false, measurePoints = [], measurePolyline = null, measureMarkers = [];
-var measureBtn = document.getElementById('measureBtn'), measureInfo = document.getElementById('measureInfo');
-
-measureBtn.addEventListener('click', function() {
-    isMeasuring = !isMeasuring;
-    if (isMeasuring) {
-        measureBtn.classList.add('active');
-        measureInfo.style.display = 'block';
-        measureInfo.innerHTML = 'Bấm các điểm trên bản đồ để đo khoảng cách (Click đúp để hủy)';
-        map.getContainer().style.cursor = 'crosshair';
-    } else { resetMeasure(); }
-});
-
-function resetMeasure() {
-    isMeasuring = false;
-    measureBtn.classList.remove('active');
-    measureInfo.style.display = 'none';
-    map.getContainer().style.cursor = '';
-    if (measurePolyline) map.removeLayer(measurePolyline);
-    measureMarkers.forEach(function(m) { map.removeLayer(m); });
-    measurePoints = []; measureMarkers = []; measurePolyline = null;
-}
+/* Ô thông báo khi admin chọn tọa độ trường trên bản đồ */
+var pickInfo = document.getElementById('pickInfo');
 
 map.on('click', function(e) {
     // Chế độ Admin bấm bản đồ lấy tọa độ thêm trường
     if (isPickingCoord) {
         isPickingCoord = false;
         map.getContainer().style.cursor = '';
-        measureInfo.style.display = 'none';
+        pickInfo.style.display = 'none';
         document.getElementById('schLat').value = e.latlng.lat.toFixed(6);
         document.getElementById('schLng').value = e.latlng.lng.toFixed(6);
         openAdminPage();
         return;
     }
-
-    if (!isMeasuring) return;
-    measurePoints.push(e.latlng);
-    var marker = L.circleMarker(e.latlng, { radius: 5, color: '#2563eb', fillColor: '#fff', fillOpacity: 1 }).addTo(map);
-    measureMarkers.push(marker);
-    if (measurePoints.length > 1) {
-        if (measurePolyline) map.removeLayer(measurePolyline);
-        measurePolyline = L.polyline(measurePoints, { color: '#2563eb', weight: 3, dashArray: '6, 8' }).addTo(map);
-        var totalDistance = 0;
-        for (var i = 0; i < measurePoints.length - 1; i++) totalDistance += measurePoints[i].distanceTo(measurePoints[i + 1]);
-        var distText = totalDistance >= 1000 ? (totalDistance / 1000).toFixed(2) + ' km' : Math.round(totalDistance) + ' m';
-        measureInfo.innerHTML = 'Tổng khoảng cách: <b>' + distText + '</b> (Bấm đúp bản đồ để hủy)';
-    }
 });
-map.on('dblclick', function() { if (isMeasuring) resetMeasure(); });
 
 /* ---------- TÌM ĐƯỜNG NGẮN NHẤT OSRM & ĐÁNH GIÁ TIẾP CẬN ---------- */
 var currentOrigin = null;
@@ -708,9 +596,9 @@ function setOrigin(newOrigin, keepExistingLine) {
         }
 
         schoolMarker.bindTooltip('<div><b>' + schoolName + '</b><br/>Cách ' + originLabel + ': <b style="color:' + statusColor + ';">' + distStr + '</b></div>', { direction: 'top', offset: [0, -15] });
-        var detailPopup = function() { return '<div style="min-width:210px;">' + schoolPhotoHtml(p) +
+        var detailPopup = function() { return '<div style="min-width:210px;">' +
                 '<h4 style="margin:0 0 6px 0; color:#1e293b; border-bottom:2px solid #2563eb; padding-bottom:4px;">' + schoolName + '</h4>' +
-                '<div style="font-size:12.5px; margin-bottom:4px;"><b>Cấp học:</b> ' + (capHoc || 'Chưa cập nhật') + '</div>' + addressDivHtml(schoolMarker.getLatLng()) +
+                '<div style="font-size:12.5px; margin-bottom:4px;"><b>Cấp học:</b> ' + (capHoc || 'Chưa cập nhật') + '</div>' +
                 '<div style="font-size:12.5px; margin-bottom:4px;"><b>Trạng thái:</b> ' + badgeText + '</div>' +
                 '<div style="font-size:13px; background:#f1f5f9; padding:6px 8px; border-radius:5px; margin-top:6px;">' +
                     '📍 Cách <b>' + originLabel + '</b>: <b style="color:' + statusColor + '; font-size:14px;">' + distStr + '</b>' +
@@ -719,8 +607,7 @@ function setOrigin(newOrigin, keepExistingLine) {
         schoolMarker.bindPopup(detailPopup, { maxHeight: 400 });
 
         schoolMarker.off('click').on('click', function() {
-            if (isMeasuring || isPickingCoord) return;
-            logSchoolSearch(p.id || null, schoolName);
+            if (isPickingCoord) return;
             if (currentOrigin) drawConnectionLine(currentOrigin.latlng, schoolMarker);
             schoolMarker.openPopup();
         });
@@ -814,55 +701,7 @@ function setLoginMode(regMode) {
     document.getElementById('fullNameGroup').style.display = regMode ? 'block' : 'none';
     document.getElementById('authSubmitBtn').textContent = regMode ? 'Tạo tài khoản' : 'Đăng nhập';
     document.getElementById('authPassword').autocomplete = regMode ? 'new-password' : 'current-password';
-    ['confirmGroup', 'avatarGroup'].forEach(function(id) { document.getElementById(id).style.display = regMode ? 'block' : 'none'; });
-}
-
-function avatarHtml(p, cls) {
-    var name = p.full_name || p.email || '?';
-    return p.avatar_url
-        ? '<img class="avatar ' + cls + '" src="' + esc(p.avatar_url) + '" alt="">'
-        : '<span class="avatar ' + cls + '">' + esc(name.charAt(0).toUpperCase()) + '</span>';
-}
-
-function resizeImage(file, size) {
-    return new Promise(function(resolve, reject) {
-        var img = new Image();
-        img.onload = function() {
-            var side = Math.min(img.width, img.height), c = document.createElement('canvas');
-            c.width = c.height = size;
-            c.getContext('2d').drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, size, size);
-            c.toBlob(function(b) { b ? resolve(b) : reject(new Error('Không xử lý được ảnh')); }, 'image/jpeg', 0.88);
-        };
-        img.onerror = function() { reject(new Error('Tệp không phải ảnh hợp lệ')); };
-        img.src = URL.createObjectURL(file);
-    });
-}
-
-async function uploadAvatar(file, uid) {
-    uid = uid || (currentUser && currentUser.id);
-    if (!file || !uid) return false;
-    try {
-        var blob = await resizeImage(file, 256);
-        var path = uid + '/avatar.jpg';
-        var up = await sb.storage.from('avatars').upload(path, blob, { upsert: true, contentType: 'image/jpeg' });
-        if (up.error) throw up.error;
-        var url = sb.storage.from('avatars').getPublicUrl(path).data.publicUrl + '?v=' + Date.now();
-        var res = await sb.from('profiles').update({ avatar_url: url }).eq('id', uid);
-        if (res.error) throw res.error;
-        return true;
-    } catch (err) {
-        toast('Lỗi ảnh đại diện: ' + err.message);
-        return false;
-    }
-}
-
-async function changeAvatar(input) {
-    var ok = await uploadAvatar(input.files[0]);
-    input.value = '';
-    if (!ok) return;
-    await checkUserSession();
-    openProfileModal();
-    toast('Đã cập nhật ảnh đại diện.');
+    document.getElementById('confirmGroup').style.display = regMode ? 'block' : 'none';
 }
 
 function showLoginPage() {
@@ -915,11 +754,6 @@ async function submitAuthForm() {
         return;
     }
     await checkUserSession();
-    var avatarFile = document.getElementById('authAvatar').files[0];
-    if (isRegisterMode && avatarFile) {
-        if (currentUser) { await uploadAvatar(avatarFile); await checkUserSession(); }
-        else toast('Bạn có thể thêm ảnh đại diện sau khi xác nhận email và đăng nhập.');
-    }
     hideLoginPageToMap();
 }
 
@@ -931,7 +765,7 @@ function renderMapAuthBar() {
         return;
     }
     var html = '<button class="action-btn" onclick="openProfileModal()">' +
-        avatarHtml(currentProfile, 'avatar-sm') + ' ' +
+        '<i class="fas fa-user"></i> ' +
         '<span>' + esc(currentProfile.full_name || currentProfile.email) + ' (' + currentProfile.role.toUpperCase() + ')</span></button>';
     if (currentProfile.role === 'admin') {
         html += '<button class="action-btn admin" onclick="openAdminPage()"><i class="fas fa-cogs"></i> <span>Trang Quản trị</span></button>';
@@ -957,7 +791,6 @@ async function checkUserSession() {
 }
 
 function openProfileModal() {
-    document.getElementById('profAvatarBox').innerHTML = avatarHtml(currentProfile, 'avatar-lg');
     document.getElementById('profEmail').value = currentProfile.email;
     document.getElementById('profRole').value = currentProfile.role === 'admin' ? 'Quản trị viên (Admin)' : 'Người dùng (User)';
     document.getElementById('profFullName').value = currentProfile.full_name || '';
@@ -995,7 +828,7 @@ async function loadSchoolsFromCloud() {
         var geojsonFeatures = cloudSchools.map(function(row) {
             return {
                 type: 'Feature',
-                properties: { id: row.id, name: row.name, CapHoc: row.cap_hoc, LoaiHinh: row.loai_hinh, anh_url: row.anh_url, created_at: row.created_at, updated_at: row.updated_at },
+                properties: { id: row.id, name: row.name, CapHoc: row.cap_hoc, LoaiHinh: row.loai_hinh, created_at: row.created_at, updated_at: row.updated_at },
                 geometry: { type: 'Point', coordinates: [row.lng, row.lat] }
             };
         });
@@ -1030,38 +863,12 @@ function localSchoolRows() {
     });
 }
 
-async function seedThenFind(i) {
-    var l = localSchoolRows()[i];
-    if (!confirm('Dữ liệu gốc chưa nằm trên Cloud nên chưa sửa hoặc xóa được. Nạp toàn bộ ' + localSchoolRows().length + ' trường lên Cloud ngay bây giờ?')) return null;
-    if (cloudSchools.length === 0 && !(await syncInitialSchoolsToCloud(true))) return null;
-    return cloudSchools.find(function(s) {
-        return s.name === l.name && Math.abs(s.lat - l.lat) < 1e-6 && Math.abs(s.lng - l.lng) < 1e-6;
-    }) || null;
-}
-
-async function editLocalSchool(i) {
-    var s = await seedThenFind(i);
-    if (s) editSchoolRow(s.id);
-}
-
-async function deleteLocalSchool(i) {
-    var s = await seedThenFind(i);
-    if (s) await deleteSchoolRow(s.id);
-}
-
 /* ---------- TRANG QUẢN TRỊ RIÊNG (ADMIN PAGE) ---------- */
-function switchAdminTab(tabId, navEl) {
-    document.querySelectorAll('.admin-nav-item').forEach(function(t) { t.classList.remove('active'); });
-    document.querySelectorAll('.tab-pane').forEach(function(p) { p.classList.remove('active'); });
-    navEl.classList.add('active');
-    document.getElementById(tabId).classList.add('active');
-}
-
 async function openAdminPage() {
     document.getElementById('adminPage').style.display = 'block';
-    await Promise.all([loadCatalogs(), loadSchoolsFromCloud(), loadAllUsers(), loadStatistics()]);
+    fillSchoolSelects();
+    await loadSchoolsFromCloud();
     renderAdminSchoolTable();
-    renderAdminUserTable();
 }
 
 function closeAdminPage() {
@@ -1084,41 +891,12 @@ function startPickSchoolOnMap() {
     closeAdminPage();
     isPickingCoord = true;
     map.getContainer().style.cursor = 'crosshair';
-    measureInfo.style.display = 'block';
-    measureInfo.innerHTML = 'Bấm vào vị trí trường học trên bản đồ để lấy tọa độ';
-}
-
-function previewSchoolPhoto(input) {
-    var img = document.getElementById('schPhotoPreview');
-    if (input.files[0]) { img.src = URL.createObjectURL(input.files[0]); img.hidden = false; }
-}
-
-function resizeToWidth(file, maxW) {
-    return new Promise(function(resolve, reject) {
-        var img = new Image();
-        img.onload = function() {
-            var k = Math.min(1, maxW / img.width), c = document.createElement('canvas');
-            c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
-            c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-            c.toBlob(function(b) { b ? resolve(b) : reject(new Error('Không xử lý được ảnh')); }, 'image/jpeg', 0.85);
-        };
-        img.onerror = function() { reject(new Error('Tệp không phải ảnh hợp lệ')); };
-        img.src = URL.createObjectURL(file);
-    });
-}
-
-async function uploadSchoolPhoto(file, schoolId) {
-    var blob = await resizeToWidth(file, 900);
-    var path = schoolId + '/photo.jpg';
-    var up = await sb.storage.from('school-images').upload(path, blob, { upsert: true, contentType: 'image/jpeg' });
-    if (up.error) throw up.error;
-    return sb.storage.from('school-images').getPublicUrl(path).data.publicUrl + '?v=' + Date.now();
+    pickInfo.style.display = 'block';
+    pickInfo.innerHTML = 'Bấm vào vị trí trường học trên bản đồ để lấy tọa độ';
 }
 
 function resetSchoolForm() {
-    ['editSchoolId', 'schName', 'schLat', 'schLng', 'schPhoto'].forEach(function(id) { document.getElementById(id).value = ''; });
-    document.getElementById('schPhotoRemove').checked = false;
-    document.getElementById('schPhotoPreview').hidden = true;
+    ['editSchoolId', 'schName', 'schLat', 'schLng'].forEach(function(id) { document.getElementById(id).value = ''; });
     document.getElementById('geoPaste').value = '';
     document.getElementById('schoolFormHeader').textContent = 'Thêm trường học';
 }
@@ -1133,11 +911,6 @@ function editSchoolRow(id) {
     document.getElementById('schLat').value = s.lat;
     document.getElementById('schLng').value = s.lng;
     document.getElementById('schoolFormHeader').textContent = 'Chỉnh sửa: ' + s.name;
-    var prev = document.getElementById('schPhotoPreview');
-    prev.hidden = !s.anh_url;
-    if (s.anh_url) prev.src = s.anh_url;
-    document.getElementById('schPhoto').value = '';
-    document.getElementById('schPhotoRemove').checked = false;
     document.querySelector('.admin-main').scrollTo({ top: 0, behavior: 'smooth' });
     document.getElementById('schName').focus();
 }
@@ -1155,25 +928,11 @@ async function saveSchool() {
         toast('Vui lòng nhập đầy đủ Tên trường và Tọa độ hợp lệ.');
         return;
     }
-    var file = document.getElementById('schPhoto').files[0];
-    var removePhoto = document.getElementById('schPhotoRemove').checked;
-
     var res = id
         ? await sb.from('truong_hoc').update(payload).eq('id', id).select().single()
         : await sb.from('truong_hoc').insert([payload]).select().single();
     if (res.error) { toast('Lỗi lưu dữ liệu: ' + res.error.message); return; }
 
-    if (file || removePhoto) {
-        try {
-            var sid = res.data.id, url = null;
-            if (file) url = await uploadSchoolPhoto(file, sid);
-            else await sb.storage.from('school-images').remove([sid + '/photo.jpg']);
-            var r2 = await sb.from('truong_hoc').update({ anh_url: url }).eq('id', sid);
-            if (r2.error) throw r2.error;
-        } catch (err) {
-            toast('Lỗi ảnh trường: ' + err.message);
-        }
-    }
     resetSchoolForm();
     await loadSchoolsFromCloud();
     renderAdminSchoolTable();
@@ -1192,230 +951,32 @@ async function deleteSchoolRow(id, name) {
 function renderAdminSchoolTable() {
     var q = (document.getElementById('adminSearchSchool').value || '').toLowerCase();
     var tbody = document.getElementById('adminSchoolTableBody');
-    var fromCloud = cloudSchools.length > 0;
-    var list = (fromCloud ? cloudSchools : localSchoolRows()).filter(function(s) { return s.name.toLowerCase().indexOf(q) !== -1; });
+    var list = cloudSchools.filter(function(s) { return s.name.toLowerCase().indexOf(q) !== -1; });
 
-    document.getElementById('syncInitialBtn').style.display = fromCloud ? 'none' : 'inline-block';
-
-    var note = fromCloud ? '' : '<tr><td colspan="5" class="note-row">' +
-        (cloudLoadError ? 'Không đọc được bảng truong_hoc: ' + esc(cloudLoadError) + '. ' : '') +
-        'Đang hiển thị dữ liệu gốc từ file, chưa nằm trên Cloud. Bấm Sửa hoặc Xóa sẽ nạp dữ liệu lên Cloud trước.</td></tr>';
+    // Nút nạp dữ liệu gốc chỉ hiện khi bảng truong_hoc trên Cloud còn trống
+    document.getElementById('syncInitialBtn').style.display = cloudSchools.length ? 'none' : 'inline-block';
 
     if (list.length === 0) {
-        tbody.innerHTML = note + '<tr><td colspan="5" class="empty">Không có trường nào khớp từ khóa.</td></tr>';
+        var msg = cloudLoadError ? 'Không đọc được bảng truong_hoc: ' + esc(cloudLoadError) : 'Chưa có trường nào. Bấm "Nạp dữ liệu gốc lên Cloud" hoặc thêm trường mới.';
+        tbody.innerHTML = '<tr><td colspan="5" class="empty">' + msg + '</td></tr>';
         return;
     }
-    tbody.innerHTML = note + list.map(function(s) {
-        var edit = fromCloud ? 'editSchoolRow(' + s.id + ')' : 'editLocalSchool(' + s._i + ')';
-        var del = fromCloud ? 'deleteSchoolRow(' + s.id + ')' : 'deleteLocalSchool(' + s._i + ')';
-        return '<tr><td>' + (s.anh_url ? '<img class="thumb" src="' + esc(s.anh_url) + '" alt="">' : '') + '<b>' + esc(s.name) + '</b></td>' +
+    tbody.innerHTML = list.map(function(s) {
+        return '<tr><td><b>' + esc(s.name) + '</b></td>' +
             '<td>' + esc(s.cap_hoc) + '</td><td>' + esc(s.loai_hinh || 'Công lập') + '</td>' +
             '<td>' + s.lat.toFixed(4) + ', ' + s.lng.toFixed(4) + '</td>' +
-            '<td class="actions"><button class="btn-sm btn-gray" onclick="' + edit + '">Sửa</button>' +
-            '<button class="btn-sm btn-red" onclick="' + del + '">Xóa</button></td></tr>';
+            '<td class="actions"><button class="btn-sm btn-gray" onclick="editSchoolRow(' + s.id + ')">Sửa</button>' +
+            '<button class="btn-sm btn-red" onclick="deleteSchoolRow(' + s.id + ')">Xóa</button></td></tr>';
     }).join('');
 }
 
-/* ---------- QUẢN LÝ NGƯỜI DÙNG (TAB 2) ---------- */
-async function loadAllUsers() {
-    var { data } = await sb.from('profiles').select('*').order('created_at', { ascending: false });
-    allProfiles = data || [];
-}
-
-function renderAdminUserTable() {
-    function fill(bodyId, searchId, countId, isAdminList) {
-        var q = (document.getElementById(searchId).value || '').toLowerCase();
-        var all = allProfiles.filter(function(u) { return (u.role === 'admin') === isAdminList; });
-        var list = all.filter(function(u) {
-            return (u.email || '').toLowerCase().indexOf(q) !== -1 || (u.full_name || '').toLowerCase().indexOf(q) !== -1;
-        });
-        document.getElementById(countId).textContent = all.length;
-        document.getElementById(bodyId).innerHTML = list.length === 0
-            ? '<div class="empty-box">Không có tài khoản nào.</div>'
-            : list.map(function(u) {
-                var isMe = currentUser && u.id === currentUser.id;
-                return '<div class="user-card">' +
-                    (u.avatar_url ? avatarHtml(u, 'avatar-xl') : '<div class="avatar-empty">Trống</div>') +
-                    '<h3>' + esc(u.full_name || (u.email || '').split('@')[0]) + (isMe ? ' <span class="muted">(bạn)</span>' : '') + '</h3>' +
-                    '<div class="email">' + esc(u.email) + '</div>' +
-                    '<div class="meta">Tạo ngày ' + new Date(u.created_at).toLocaleDateString('vi-VN') + '</div>' +
-                    '<div class="actions"><button class="btn-sm btn-gray" onclick="openEditUser(\'' + u.id + '\')">Sửa</button>' +
-                    (isMe ? '' : '<button class="btn-sm btn-red" onclick="deleteUserAccount(\'' + u.id + '\')">Xóa</button>') +
-                    '</div></div>';
-            }).join('');
-    }
-    fill('adminAdminTableBody', 'adminSearchAdmin', 'adminCount', true);
-    fill('adminUserTableBody', 'adminSearchUser', 'userCount', false);
-}
-
-function showEditUserAvatar(uid) {
-    var u = allProfiles.find(function(x) { return x.id === uid; });
-    if (!u) return;
-    document.getElementById('editUserAvatarBox').innerHTML = avatarHtml(u, 'avatar-lg');
-    document.getElementById('editUserAvatarRemove').style.display = u.avatar_url ? '' : 'none';
-}
-
-async function refreshEditUser(uid) {
-    await loadAllUsers();
-    renderAdminUserTable();
-    if (currentUser && uid === currentUser.id) await checkUserSession();
-    showEditUserAvatar(uid);
-}
-
-async function changeEditUserAvatar(input) {
-    var uid = document.getElementById('editUserId').value;
-    var ok = await uploadAvatar(input.files[0], uid);
-    input.value = '';
-    if (!ok) return;
-    await refreshEditUser(uid);
-    toast('Đã cập nhật ảnh đại diện.');
-}
-
-async function removeEditUserAvatar() {
-    var uid = document.getElementById('editUserId').value;
-    if (!confirm('Xóa ảnh đại diện của tài khoản này?')) return;
-    var { error } = await sb.from('profiles').update({ avatar_url: null }).eq('id', uid);
-    if (error) { toast('Lỗi xóa ảnh: ' + error.message); return; }
-    await sb.storage.from('avatars').remove([uid + '/avatar.jpg']);
-    await refreshEditUser(uid);
-    toast('Đã xóa ảnh đại diện.');
-}
-
-function openEditUser(uid) {
-    var u = allProfiles.find(function(x) { return x.id === uid; });
-    if (!u) return;
-    document.getElementById('editUserId').value = u.id;
-    document.getElementById('editUserEmail').value = u.email;
-    document.getElementById('editUserName').value = u.full_name || '';
-    document.getElementById('editUserRole').value = u.role === 'admin' ? 'admin' : 'user';
-    document.getElementById('editUserRole').disabled = !!(currentUser && u.id === currentUser.id);
-    showEditUserAvatar(uid);
-    openModal('editUserModal');
-}
-
-async function saveEditUser() {
-    var uid = document.getElementById('editUserId').value;
-    var name = document.getElementById('editUserName').value.trim();
-    var roleEl = document.getElementById('editUserRole');
-    if (!name) { toast('Vui lòng nhập họ và tên.'); return; }
-    var payload = { full_name: name };
-    if (!roleEl.disabled) payload.role = roleEl.value;
-    var { error } = await sb.from('profiles').update(payload).eq('id', uid);
-    if (error) { toast('Lỗi cập nhật: ' + error.message); return; }
-    closeModal('editUserModal');
-    await loadAllUsers();
-    renderAdminUserTable();
-    if (currentUser && uid === currentUser.id) await checkUserSession();
-    toast('Đã cập nhật tài khoản.');
-}
-
-async function deleteUserAccount(uid, email) {
-    email = email || (allProfiles.find(function(u) { return u.id === uid; }) || {}).email || '';
-    if (!confirm('Xóa vĩnh viễn tài khoản "' + email + '"?')) return;
-    var { error } = await sb.rpc('admin_delete_user', { target_user_id: uid });
-    if (error) { toast('Lỗi xóa tài khoản: ' + error.message); return; }
-    await loadAllUsers();
-    renderAdminUserTable();
-}
-
-/* ---------- QUẢN LÝ DANH MỤC (TAB 3) ---------- */
-async function loadCatalogs() {
-    var [resCap, resLoai] = await Promise.all([
-        sb.from('cap_truong').select('*').order('id'),
-        sb.from('loai_hinh').select('*').order('id')
-    ]);
-    capCatalogList = resCap.data || [];
-    loaiCatalogList = resLoai.data || [];
-
-    var opt = function(v) { return '<option value="' + esc(v) + '">' + esc(v) + '</option>'; };
-    var row = function(v, table, id) {
-        return '<tr><td>' + esc(v) + '</td><td class="actions"><button class="btn-sm btn-red" onclick="deleteCatalog(\'' + table + '\', ' + id + ')">Xóa</button></td></tr>';
-    };
-    var kv = function(label, n, unit) { return '<div class="kv"><span>' + label + '</span><b>' + n + ' ' + unit + '</b></div>'; };
-
-    document.getElementById('schCapHoc').innerHTML = capCatalogList.map(function(c) { return opt(c.ten_cap); }).join('');
-    document.getElementById('schLoaiHinh').innerHTML = loaiCatalogList.map(function(l) { return opt(l.ten_loai); }).join('');
-    document.getElementById('capCatalogBody').innerHTML = capCatalogList.map(function(c) { return row(c.ten_cap, 'cap_truong', c.id); }).join('');
-    document.getElementById('loaiCatalogBody').innerHTML = loaiCatalogList.map(function(l) { return row(l.ten_loai, 'loai_hinh', l.id); }).join('');
-    document.getElementById('spatialCatalogSummary').innerHTML =
-        kv('Phường / Xã', json_NhaTrang_KetQua_0.features.length, 'đơn vị') +
-        kv('Đoạn đường giao thông', json_CatDuonggkpgcat_Duong_1.features.length, 'đoạn') +
-        kv('Trạm xe buýt', json_Tram_BusTramBus_4.features.length, 'trạm');
-}
-
-async function addCatalog(table, col, inputId) {
-    var valText = document.getElementById(inputId).value.trim();
-    if (!valText) return;
-    var row = {}; row[col] = valText;
-    var { error } = await sb.from(table).insert([row]);
-    if (error) { toast('Lỗi thêm danh mục: ' + error.message); return; }
-    document.getElementById(inputId).value = '';
-    await loadCatalogs();
-}
-
-async function deleteCatalog(table, id) {
-    var { error } = await sb.from(table).delete().eq('id', id);
-    if (error) { toast('Lỗi xóa danh mục: ' + error.message); return; }
-    await loadCatalogs();
-}
-
-/* ---------- BÁO CÁO - THỐNG KÊ & SAO LƯU (TAB 4) ---------- */
-async function logSchoolSearch(id, name) {
-    if (!sb || !name) return;
-    await sb.from('log_tra_cuu').insert([{ truong_id: id, truong_name: name }]);
-}
-
-async function logPageVisit() {
-    if (!sb || sessionStorage.getItem('nt_webgis_visited')) return;
-    sessionStorage.setItem('nt_webgis_visited', '1');
-    await sb.from('log_truy_cap').insert([{ user_email: currentUser ? currentUser.email : 'Khách' }]);
-}
-
-async function loadStatistics() {
-    var now = new Date();
-    var startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-    var startOfYear = new Date(now.getFullYear(), 0, 1).toISOString();
-
-    var [resSearch, resVisit] = await Promise.all([
-        sb.from('log_tra_cuu').select('*').gte('created_at', startOfYear),
-        sb.from('log_truy_cap').select('*').gte('created_at', startOfYear)
-    ]);
-
-    var searches = resSearch.data || [];
-    var visits = resVisit.data || [];
-
-    var newSchoolsMonth = cloudSchools.filter(function(s) { return s.updated_at >= startOfMonth; }).length;
-    document.getElementById('stTotalSchools').textContent = cloudSchools.length || json_TruongHoctruonghoc_nhatrang_5.features.length;
-    document.getElementById('stNewSchoolsMonth').textContent = 'Cập nhật tháng này: ' + newSchoolsMonth;
-
-    document.getElementById('stSearchMonth').textContent = searches.filter(function(x) { return x.created_at >= startOfMonth; }).length;
-    document.getElementById('stSearchYear').textContent = 'Cả năm: ' + searches.length;
-
-    document.getElementById('stVisitMonth').textContent = visits.filter(function(x) { return x.created_at >= startOfMonth; }).length;
-    document.getElementById('stVisitYear').textContent = 'Cả năm: ' + visits.length;
-
-    document.getElementById('stTotalUsers').textContent = allProfiles.length;
-    document.getElementById('stNewUsersMonth').textContent = 'Mới tháng này: ' + allProfiles.filter(function(u) { return u.created_at >= startOfMonth; }).length;
-
-    var countMap = {};
-    searches.forEach(function(item) { countMap[item.truong_name] = (countMap[item.truong_name] || 0) + 1; });
-    var topList = Object.keys(countMap).map(function(k) { return { name: k, count: countMap[k] }; })
-        .sort(function(a, b) { return b.count - a.count; }).slice(0, 6);
-
-    document.getElementById('topSchoolsBody').innerHTML = topList.length === 0
-        ? '<tr><td colspan="2" style="color:#64748b;">Chưa có dữ liệu tra cứu</td></tr>'
-        : topList.map(function(t) { return '<tr><td>' + esc(t.name) + '</td><td><b>' + t.count + '</b></td></tr>'; }).join('');
-}
-
-function backupSchoolsJSON() {
-    var dataToExport = cloudSchools.length > 0 ? cloudSchools : json_TruongHoctruonghoc_nhatrang_5;
-    var blob = new Blob([JSON.stringify(dataToExport, null, 2)], { type: 'application/json' });
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement('a');
-    a.href = url;
-    a.download = 'backup_truonghoc_nhatrang_' + new Date().toISOString().slice(0, 10) + '.json';
-    a.click();
-    URL.revokeObjectURL(url);
+/* Danh mục cấp học / loại hình để cố định trong code (không dùng bảng riêng) */
+var CAP_HOC_LIST = ['Mầm non / Mẫu giáo', 'Tiểu học', 'THCS', 'THPT', 'Đại học / Cao đẳng'];
+var LOAI_HINH_LIST = ['Công lập', 'Tư thục / Dân lập'];
+function fillSchoolSelects() {
+    function opts(list) { return list.map(function(v) { return '<option value="' + esc(v) + '">' + esc(v) + '</option>'; }).join(''); }
+    document.getElementById('schCapHoc').innerHTML = opts(CAP_HOC_LIST);
+    document.getElementById('schLoaiHinh').innerHTML = opts(LOAI_HINH_LIST);
 }
 
 /* ---------- KHỞI CHẠY KHI MỞ TRANG ---------- */
@@ -1428,7 +989,6 @@ function backupSchoolsJSON() {
         showLoginPage();
     }
     await loadSchoolsFromCloud();
-    await logPageVisit();
 })();
 
 /* ---------- TỐI ƯU GIAO DIỆN ĐIỆN THOẠI (RESPONSIVE) ---------- */
